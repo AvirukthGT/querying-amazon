@@ -20,7 +20,7 @@ WHERE return_date IS NOT NULL;
 
 -- ========================================
 -- 1. Top Selling Products
--- Objective: Identify top 10 products by total sales revenue
+-- Objective: Identifying top 10 products by total sales revenue
 -- ========================================
 
 -- Add new column for calculated revenue
@@ -31,7 +31,7 @@ ADD COLUMN total_sale FLOAT;
 UPDATE order_items 
 SET total_sale = quantity * price_per_unit;
 
--- Fetch top 10 selling products with total revenue and order count
+-- Fetching top 10 selling products with total revenue and order count
 SELECT 
     p.product_id,
     p.product_name,
@@ -79,7 +79,7 @@ ORDER BY average_spending DESC;
 
 -- ========================================
 -- 4. Monthly Sales Trend
--- Objective: Compare monthly sales including previous month's sales
+-- Objective: Comparing monthly sales including previous month's sales
 -- ========================================
 SELECT   
     year,
@@ -100,9 +100,107 @@ FROM (
 
 -- ========================================
 -- 5. Customers with No Purchases
--- Objective: Identify customers who registered but never placed any orders
+-- Objective: Identifying customers who registered but never placed any orders
 -- ========================================
 SELECT *
 FROM customer c
 LEFT JOIN orders o USING(customer_id)
 WHERE o.order_id IS NULL;
+
+
+
+-- ========================================
+-- 6. Least-Selling Categories by State
+-- Objective: For each state, find the product category with the lowest total sales.
+-- ========================================
+SELECT 
+    state,
+    category_name,
+    total_sales
+FROM (
+    SELECT  
+        c.state,
+        ca.category_name,
+        ROUND(SUM(oi.total_sale::NUMERIC), 2) AS total_sales,
+        RANK() OVER(PARTITION BY c.state ORDER BY SUM(oi.total_sale)) AS rank
+    FROM customer c
+    JOIN orders o USING(customer_id)
+    JOIN order_items oi USING(order_id)
+    JOIN product p USING(product_id)
+    JOIN category ca USING(category_id)
+    GROUP BY c.state, ca.category_name
+) AS t
+WHERE rank = 1;
+
+
+-- ========================================
+-- 7. Customer Lifetime Value (CLTV)
+-- Objective: Calculate lifetime value of each customer and rank them.
+-- ========================================
+SELECT 
+    c.customer_id,
+    CONCAT(c.first_name, ' ', c.last_name) AS full_name,
+    ROUND(SUM(oi.total_sale::NUMERIC), 2) AS total_sale,
+    DENSE_RANK() OVER(ORDER BY SUM(oi.total_sale) DESC) AS rank
+FROM customer c
+JOIN orders o USING(customer_id)
+JOIN order_items oi USING(order_id)
+GROUP BY c.customer_id, full_name
+ORDER BY rank;
+
+
+-- ========================================
+-- 8. Inventory Stock Alerts
+-- Objective: Identify products with low stock (less than 10 units).
+-- Include restock date and warehouse information.
+-- ========================================
+
+-- ✅ Using JOIN
+SELECT *
+FROM product p
+JOIN inventory i USING(product_id)
+WHERE i.stock < 10;
+
+-- ✅ Alternative using subquery (no JOIN)
+SELECT *
+FROM product
+WHERE product_id IN (
+    SELECT product_id 
+    FROM inventory 
+    WHERE stock < 10
+);
+
+
+-- ========================================
+-- 9. Shipping Delays
+-- Objective: Find orders where shipping was delayed more than 3 days.
+-- Include customer name, order date, shipping provider, and delay duration.
+-- ========================================
+SELECT 
+    o.order_id,
+    CONCAT(c.first_name, ' ', c.last_name) AS full_name,
+    o.order_date,
+    s.shipping_date,
+    s.shipping_providers,
+    (s.shipping_date - o.order_date) AS shipped_after_days
+FROM customer c
+JOIN orders o USING(customer_id)
+JOIN shipping s USING(order_id)
+WHERE (s.shipping_date - o.order_date) > 3;
+
+
+-- ========================================
+-- 10. Payment Success Rate
+-- Objective: Calculate the percentage of each payment status (e.g., success, failed, pending).
+-- ========================================
+SELECT 
+    payment_status,
+    COUNT(*) AS total_count,
+    ROUND(
+        COUNT(*)::NUMERIC / (SELECT COUNT(*) FROM payment) * 100, 
+        2
+    ) AS percentage_breakdown
+FROM payment
+GROUP BY payment_status;
+
+
