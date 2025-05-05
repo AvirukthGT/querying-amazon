@@ -328,8 +328,91 @@ JOIN order_items oi USING(order_id);
 -- Note: If the result is empty, these sellers truly had no orders at all in that period.
 
 
+/*
+16. IDENTITY customers into returning or new
+if the customer has placed more than 5 return categorize them as returning otherwise new
+Challenge: List customers id, name, total orders, total returns
+*/
+select *, 
+	case 
+		when total_returns>5 then 'Frequently Returning' else 'New'
+	end as cx_category
+from(
+select 
+	concat(c.first_name,' ',c.last_name) as full_name,
+	count(o.order_id) as total_orders,
+	SUM(case when o.order_status='Returned' then 1 else 0 end ) as total_returns
+
+from customer c join orders o using(customer_id) join order_items oi using(order_id)
+group by 1
+) as t order by total_returns desc
 
 
 
+/*
+17. Top 5 Customers by Orders in Each State
+Identify the top 5 customers with the highest number of orders for each state.
+Challenge: Include the number of orders and total sales for each customer.
+*/
+
+with cte as (
+select 
+	c.state,
+	concat(c.first_name,' ',c.last_name) as full_name,
+	count(o.order_id) as total_orders,
+	sum(oi.total_sale) as total_sale,
+	dense_rank() over(partition by c.state order by count(o.order_id) desc) as rank
+from orders as o join order_items oi using(order_id) join customer c using(customer_id)
+group by 1,2
+order by 1,3 desc
+) select * from cte where rank<=5
+
+/*
+18. Revenue by Shipping Provider
+Calculate the total revenue handled by each shipping provider.
+Challenge: Include the total number of orders handled and the average delivery time for each provider.
+*/
+
+select 
+	s.shipping_providers,
+	count(order_id) as orders_handled,
+	sum(total_sale) as total_revenue
+from shipping s join orders o using(order_id) join order_items oi using(order_id)
+group by 1
+
+/*
+19. Top 10 product with highest decreasing revenue ratio compare to last year(2022) and current_year(2023)
+Challenge: Return product_id, product_name, category_name, 2022 revenue and 2023 revenue decrease ratio at end Round the result
+
+Note: Decrease ratio = cr-ls/ls* 100 (cs = current_year ls=last_year)
+*/
+
+with last_year as (
+select 
+	p.product_id,
+	p.product_name,
+	sum(oi.total_sale) as total_sale_2022
+from product p join order_items oi using(product_id) join orders o using(order_id)
+where extract(year from order_date)=2022
+group by 1,2
+),
+current_year as 
+(
+select 
+	p.product_id,
+	p.product_name,
+	sum(oi.total_sale) as total_sale_2023
+from product p join order_items oi using(product_id) join orders o using(order_id)
+where extract(year from order_date)=2023
+group by 1,2 
+)
+select 
+	cy.product_id,
+	cy.product_name,
+	total_sale_2022,
+	total_sale_2023,
+	round((total_sale_2023-total_sale_2022)::numeric/total_sale_2022::numeric*100,2)
+from last_year ly join current_year cy using(product_id)
+order by 5 asc
 
 
