@@ -91,6 +91,8 @@ CREATE TABLE order_items (
         REFERENCES product(product_id)
 );
 
+
+
 -- =====================
 -- PAYMENT TABLE
 -- =====================
